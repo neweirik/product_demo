@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotating glTF Model with Buffer Zone and Animation</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <style>
+        body {
+            margin: 500;
+
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="modelDescription"
+        style="position: absolute; top: 10px; right: 10px; white-space: pre-wrap; padding: 10px; background-color: rgba(255, 255, 255, 0.7); border-radius: 5px; max-width: 300px;">
+        Your Text Here</div>
+
+
+    <script>
+        let scene, camera, renderer, mouse, raycaster;
+        let model; // Reference to the loaded model
+        let exploded = false; // Flag to control explosion effect
+        let line; // Global reference to the line
+
+        function createLine() {
+            const material = new THREE.LineBasicMaterial({ color: 0x0000ff });
+            const points = [];
+            points.push(new THREE.Vector3(0, 0, 0)); // Temporary starting point
+            points.push(new THREE.Vector3(0, 0, 0)); // Temporary ending point
+
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+            line = new THREE.Line(geometry, material);
+            scene.add(line);
+        }
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdddddd);
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 5000);
+            camera.rotation.y = 45 / 180 * Math.PI;
+            camera.position.set(1280, 100, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+            hemiLight.position.set(0, 200, 0);
+            scene.add(hemiLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff);
+            directionalLight.position.set(0, 200, 100).normalize();
+            scene.add(directionalLight);
+
+            mouse = new THREE.Vector2();
+            raycaster = new THREE.Raycaster();
+
+            const loader = new THREE.GLTFLoader();
+            loader.load('x.glb', function (gltf) {
+                model = gltf.scene;
+                scene.add(model);
+                animate();
+            });
+
+            document.addEventListener('mousemove', onMouseMove, false);
+        }
+
+        function onMouseMove(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function checkHover() {
+            // Convert mouse position to a vector in the 3D space
+            var vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+            vector.unproject(camera);
+
+            var dir = vector.sub(camera.position).normalize();
+            var distance = - camera.position.z / dir.z;
+            var pos = camera.position.clone().add(dir.multiplyScalar(distance));
+
+            // Assuming `model.position` is the central point of your model
+            // Calculate the distance between `pos` and your model
+            var modelPos = model.position; // You might need to adjust this based on your model
+            var distanceToModel = pos.distanceTo(modelPos);
+
+            // Define a threshold for how close the mouse needs to be to trigger the explosion
+            var threshold = 500; // Adjust this value as needed
+
+            if (distanceToModel < threshold && !exploded) {
+                explodeModel();
+            } else if (distanceToModel >= threshold && exploded) {
+                resetModel();
+            }
+        }
+
+
+        function explodeModel() {
+            exploded = true;
+            let idx = 0;
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    const positions = {
+                        2: { x: 0, y: 84, z: -84 },
+                        3: { x: 0, y: -84, z: 84 },
+                        4: { x: 0, y: 84, z: 84 },
+                        5: { x: 0, y: -84, z: -84 }
+                    };
+                    if (positions[idx]) {
+                        new TWEEN.Tween(child.position)
+                            .to(positions[idx], 1000)
+                            .easing(TWEEN.Easing.Quadratic.Out)
+                            .start();
+                    }
+                }
+                idx++;
+            });
+        }
+
+        function resetModel() {
+            exploded = false;
+            let idx = 0;
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    new TWEEN.Tween(child.position)
+                        .to({ x: 0, y: 0, z: 0 }, 1000)
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .start();
+                }
+                idx++;
+            });
+        }
+        function onMouseMove(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Update the raycaster to check for intersections
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(model.children, true);
+
+            if (intersects.length > 0) {
+                // Show the description and position it near the mouse cursor
+                const descriptionEl = document.getElementById('modelDescription');
+                descriptionEl.style.display = 'block';
+                descriptionEl.style.left = '900px';
+                descriptionEl.style.top = '800px';
+
+                switch (intersects[0].object.name) {
+                    case "Cube":
+                        descriptionEl.textContent = "Screen: Incorporates OLED technology from South Korea, offering vibrant colors and deep blacks for an enhanced visual experience, suitable for high-definition content viewing";
+                        break;
+                    case "Cube001":
+                        descriptionEl.textContent = "Processor: Utilizes a multi-core design from the USA, optimized for efficient multitasking and seamless operation across demanding applications, ensuring a smooth user interface.";
+                        break;
+                    case "Cube002":
+                        descriptionEl.textContent = "Battery: Features a lithium-ion composition from Japan, known for its quick charging capabilities and prolonged life, minimizing the need for frequent recharges and extending usability.";
+                        break;
+                    case "Cube003":
+                        descriptionEl.textContent = "Camera: Equipped with optical image stabilization technology from Germany, it significantly reduces photo blur caused by hand movement, especially in low-light conditions, improving image clarity.";
+                        break;
+                    case "Cube004":
+                        descriptionEl.textContent = "Operating System: Powered by either the American iOS or South Korean Android platform, it provides a user-friendly interface and access to a vast ecosystem of apps, enhancing functionality and customization.";
+                        break;
+                }
+
+                console.log(intersects[0])
+            } else {
+                document.getElementById('modelDescription').style.display = 'none';
+            }
+        }
+
+
+        function updateLine() {
+            if (!model || !line) return; // Ensure model and line are loaded
+
+            const childPosition = new THREE.Vector3(); // Assuming you have a target child object
+            // For demonstration, we're taking the model's position. Replace this with your specific child's position.
+            childPosition.setFromMatrixPosition(model.matrixWorld);
+
+            const screenPosition = childPosition.project(camera);
+
+            const x = (screenPosition.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+            const y = -(screenPosition.y * 0.5 - 0.5) * renderer.domElement.clientHeight;
+
+            // Update line's start (3D object) and end (2D projection) positions
+            line.geometry.attributes.position.setXYZ(0, childPosition.x, childPosition.y, childPosition.z); // Start at child object
+            line.geometry.attributes.position.setXYZ(1, x, y, 0); // End at projected screen position (adjust Z accordingly)
+            line.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            scene.rotation.y += 0.01;
+            checkHover();
+            updateLine(); // Call this to update the line's position
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
